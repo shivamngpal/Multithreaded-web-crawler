@@ -1,4 +1,5 @@
+.env
 .vscode/
 build/
 include/
-./src/Crawler.cpp
+src/crawler.cpp
