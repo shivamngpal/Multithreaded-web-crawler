@@ -13,6 +13,7 @@
 #include <gumbo.h>
 
 #include "SafeQueue.h" // Updated SafeQueue with stop()
+#include <cstring>
 
 using namespace std;
 
@@ -27,15 +28,11 @@ atomic<int> pagesCrawled{0};
 const int MAX_PAGES = 200;
 
 string getApiEndpoint(){
-    const char* env_ptr = getenv("CRAWLER_API_URL");
-    if(env_ptr == nullptr)
-        return "http://localhost:5000/api/pages";
-    
-    string env_url = env_ptr;
-    if(env_url.empty())
+    const char* env_url = getenv("CRAWLER_API_URL");
+    if(env_url == nullptr || strlen(env_url)==0)
         return "http://localhost:5000/api/pages";
 
-    return env_url;
+    return string(env_url);
 }
 // This is a callback function that libcurl uses.
 // libcurl gives data in bytes
