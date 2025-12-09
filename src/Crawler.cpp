@@ -19,8 +19,14 @@
 
 using namespace std;
 
+struct UrlTask
+{
+    string url;
+    int depth;
+};
+
 // shared resources
-SafeQueue<string> urlFrontier; // stores the links to visit
+SafeQueue<UrlTask> urlFrontier; // stores the links to visit
 unordered_set<string> visited; // stores already visited strings
 // we are using unordered_set because its very fast to look up visited links
 mutex visitedMutex;
@@ -28,6 +34,7 @@ mutex visitedMutex;
 // const int MAX_THREADS = thread::hardware_concurrency() > 0 ? thread::hardware_concurrency() : 4;
 atomic<int> pagesCrawled{0};
 const int MAX_PAGES = 200;
+const int MAX_DEPTH = 3;
 // crawl config
 const string ALLOWED_DOMAIN = "info.cern.ch"; // only crawl this domain
 
@@ -178,13 +185,28 @@ void crawler_worker(int thread_id)
 
     while (true)
     {
-        string currentUrl;
-
+        UrlTask task;
         // 1. Get a URL from the SafeQueue (Waits if empty)
-        // Note: In a real crawler, we'd need a shutdown signal here.
-        if (!urlFrontier.pop(currentUrl))
+        if (!urlFrontier.pop(task))
         {
             break;
+        }
+
+        std::string currentUrl = task.url;
+        int currentDepth = task.depth;
+
+        // Safety: if somehow depth exceeded, skip
+        if (currentDepth > MAX_DEPTH)
+        {
+            continue;
+        }
+
+        // 🔒 DOMAIN RESTRICTION: skip anything outside ALLOWED_DOMAIN
+        if (!isInAllowedDomain(currentUrl))
+        {
+            cerr << "[Thread " << thread_id << "] Skipping (outside domain): "
+                 << currentUrl << endl;
+            continue;
         }
 
         // std::cout << "[Thread " << thread_id << "] Crawling: " << currentUrl << std::endl;
@@ -221,33 +243,35 @@ void crawler_worker(int thread_id)
             extractedLinks.erase(unique(extractedLinks.begin(), extractedLinks.end()), extractedLinks.end());
 
             // Collect only truly new links (not yet visited)
-            vector<string> newLinks;
+            vector<UrlTask> newTasks;
             {
                 unique_lock<mutex> lock(visitedMutex);
                 for (const string &link : extractedLinks)
                 {
-                    // 1. stay inside allowed domain
-                    if (!isInAllowedDomain(link))
-                    {
+                    // depth limit: only schedule if next depth is within MAX_DEPTH
+                    if (currentDepth + 1 > MAX_DEPTH)
                         continue;
-                    }
-                    // visited.insert returns {iterator, bool}; bool==true if newly inserted
+
+                    // 🌐 DOMAIN RESTRICTION: only schedule URLs from ALLOWED_DOMAIN
+                    if (!isInAllowedDomain(link))
+                        continue;
+
                     if (visited.insert(link).second)
                     {
-                        newLinks.push_back(link);
+                        newTasks.push_back(UrlTask{link, currentDepth + 1});
                     }
                 }
-            } // visitedMutex unlocked here
+            } // visitedMutex unlocked
 
-            // Push new links into the frontier outside of visitedMutex lock
-            for (const string &link : newLinks)
+            for (const auto &t : newTasks)
             {
-                urlFrontier.push(link);
+                urlFrontier.push(t);
             }
 
             // 5. Update global page count and possibly stop
             int currentCount = ++pagesCrawled;
             cout << "[Thread " << thread_id << "] Indexed: " << currentUrl
+                 << " | Depth: " << currentDepth
                  << " | Links: " << extractedLinks.size()
                  << " | Total pages: " << currentCount << endl;
 
@@ -274,7 +298,8 @@ void runCrawler(){
 
     // 2. Seed the frontier with a safe, small root
     string seed = "http://info.cern.ch";
-    urlFrontier.push(seed);
+    UrlTask seedTask{seed, 0};
+    urlFrontier.push(seedTask);
     visited.insert(seed);
 
     cout << "Starting Production Crawler..." << endl;
