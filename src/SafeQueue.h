@@ -37,7 +37,7 @@ class SafeQueue{
             if(q.empty())
                 return false;
 
-            result = q.front();
+            result = move(q.front());
             q.pop();
             return true;
         }
