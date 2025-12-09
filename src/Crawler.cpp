@@ -15,6 +15,7 @@
 
 #include "SafeQueue.h" // Updated SafeQueue with stop()
 #include <cstring>
+#include<cctype>
 
 using namespace std;
 
@@ -27,6 +28,8 @@ mutex visitedMutex;
 // const int MAX_THREADS = thread::hardware_concurrency() > 0 ? thread::hardware_concurrency() : 4;
 atomic<int> pagesCrawled{0};
 const int MAX_PAGES = 200;
+// crawl config
+const string ALLOWED_DOMAIN = "info.cern.ch"; // only crawl this domain
 
 string getApiEndpoint()
 {
@@ -38,6 +41,39 @@ string getApiEndpoint()
 
     return string(env_url);
 }
+
+string toLowerCopy(const string &s)
+{
+    string out = s;
+    transform(out.begin(), out.end(), out.begin(),
+              [](unsigned char c)
+              { return tolower(c); });
+    return out;
+}
+
+// Extract host from "scheme://host/path..."
+string extractHost(const string &url)
+{
+    // find "://"
+    size_t schemeEnd = url.find("://");
+    size_t hostStart = (schemeEnd == string::npos) ? 0 : schemeEnd + 3;
+    size_t hostEnd = url.find('/', hostStart);
+
+    if (hostEnd == string::npos)
+    {
+        // no "/" after host
+        return url.substr(hostStart);
+    }
+    return url.substr(hostStart, hostEnd - hostStart);
+}
+
+// Check if a URL belongs to ALLOWED_DOMAIN (case-insensitive)
+bool isInAllowedDomain(const string &url)
+{
+    string host = extractHost(url);
+    return toLowerCopy(host) == toLowerCopy(ALLOWED_DOMAIN);
+}
+
 // This is a callback function that libcurl uses.
 // libcurl gives data in bytes
 // When libcurl downloads data, it gives it to us in chunks through this function.
@@ -190,6 +226,11 @@ void crawler_worker(int thread_id)
                 unique_lock<mutex> lock(visitedMutex);
                 for (const string &link : extractedLinks)
                 {
+                    // 1. stay inside allowed domain
+                    if (!isInAllowedDomain(link))
+                    {
+                        continue;
+                    }
                     // visited.insert returns {iterator, bool}; bool==true if newly inserted
                     if (visited.insert(link).second)
                     {
