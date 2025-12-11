@@ -35,6 +35,7 @@ mutex visitedMutex;
 
 // const int MAX_THREADS = thread::hardware_concurrency() > 0 ? thread::hardware_concurrency() : 4;
 atomic<int> pagesCrawled{0};
+atomic<int> activeWorkers{0};
 const int MAX_PAGES = 200;
 const int MAX_DEPTH = 3;
 // crawl config
@@ -49,53 +50,6 @@ string getApiEndpoint()
         return "http://localhost:5000/api/pages";
 
     return string(env_url);
-}
-
-// Escape minimal set of chars for JSON string values
-static string jsonEscape(const std::string &s)
-{
-    string out;
-    out.reserve(s.size() + 16);
-    for (char c : s)
-    {
-        switch (c)
-        {
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\"':
-            out += "\\\"";
-            break;
-        case '\b':
-            out += "\\b";
-            break;
-        case '\f':
-            out += "\\f";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        default:
-            // control characters (0x00–0x1F) -> \u00XX
-            if (static_cast<unsigned char>(c) < 0x20)
-            {
-                char buf[7];
-                snprintf(buf, sizeof(buf), "\\u%04x", c & 0xff);
-                out += buf;
-            }
-            else
-            {
-                out += c;
-            }
-        }
-    }
-    return out;
 }
 
 string toLowerCopy(const string &s)
@@ -286,83 +240,102 @@ void sendDataToBackend(const std::string &url, const std::string &title, const s
 
 void crawler_worker(int thread_id)
 {
-    CURL *curl = curl_easy_init(); // Each thread gets its own CURL handle
+    CURL *curl = curl_easy_init();
     if (!curl)
         return;
 
     while (true)
     {
         UrlTask task;
-        // 1. Get a URL from the SafeQueue (Waits if empty)
+
+        // Wait for a task; returns false if queue was stopped and empty
         if (!urlFrontier.pop(task))
         {
             break;
         }
 
-        std::string currentUrl = task.url;
-        int currentDepth = task.depth;
+        // Mark this worker as active for this task
+        ++activeWorkers; // atomic increment
 
-        // Safety: if somehow depth exceeded, skip
+        const std::string currentUrl = task.url;
+        const int currentDepth = task.depth;
+
+        // If depth exceeded, finish task and possibly trigger stop
         if (currentDepth > MAX_DEPTH)
         {
+            int stillActive = --activeWorkers; // atomic decrement
+            if (stillActive == 0 && urlFrontier.empty())
+            {
+                urlFrontier.stop();
+            }
             continue;
         }
 
-        // 🔒 DOMAIN RESTRICTION: skip anything outside ALLOWED_DOMAIN
+        // Domain restriction: skip disallowed domains
         if (!isInAllowedDomain(currentUrl))
         {
             cerr << "[Thread " << thread_id << "] Skipping (outside domain): "
                  << currentUrl << endl;
+
+            int stillActive = --activeWorkers;
+            if (stillActive == 0 && urlFrontier.empty())
+            {
+                urlFrontier.stop();
+            }
             continue;
         }
 
-        // std::cout << "[Thread " << thread_id << "] Crawling: " << currentUrl << std::endl;
-
+        // Prepare libcurl for fetch
         string html_buffer;
         curl_easy_setopt(curl, CURLOPT_URL, currentUrl.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &html_buffer);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);       // 10 second timeout per page
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L); // Follow redirects
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_USERAGENT,
                          "ShivamCrawler/1.0 (Student Project)");
 
+        // politeness
         this_thread::sleep_for(chrono::milliseconds(200));
+
         CURLcode res = curl_easy_perform(curl);
 
         if (res == CURLE_OK)
         {
-            // 2. Parse HTML
+            // PARSE HTML
             GumboOptions options = kGumboDefaultOptions;
-            GumboOutput *output = gumbo_parse_with_options(&options, html_buffer.c_str(), html_buffer.size());
+            GumboOutput *output = gumbo_parse_with_options(
+                &options,
+                html_buffer.c_str(),
+                html_buffer.size());
 
+            // Extract links from DOM
             vector<string> extractedLinks;
-            searchForLinks(output->root, currentUrl, extractedLinks); // Extract new links
-                                                                      // Extract title from raw HTML buffer (more reliable) OR from Gumbo tree
-            string title = extractTitleFromGumboOutput(output);
+            searchForLinks(output->root, currentUrl, extractedLinks);
+
+            // Extract title from the existing GumboOutput (no reparse)
+            std::string title = extractTitleFromGumboOutput(output);
 
             gumbo_destroy_output(&options, output);
 
-            // 3. Report to Backend (always include title even if no links)
+            // REPORT: send url + title + links to backend (even if links empty)
             sendDataToBackend(currentUrl, title, extractedLinks);
 
+            // Dedupe per-page
             sort(extractedLinks.begin(), extractedLinks.end());
-            // erase all the duplicate elements
-            // unique elements are present at start of vector and unique returns iterator at the end of unique ele
-            // erase from end of unique to last of extractedLinks vector.
-            extractedLinks.erase(unique(extractedLinks.begin(), extractedLinks.end()), extractedLinks.end());
+            extractedLinks.erase(unique(extractedLinks.begin(), extractedLinks.end()),
+                                 extractedLinks.end());
 
-            // Collect only truly new links (not yet visited)
+            // Schedule new tasks (depth + domain + visited checks)
             vector<UrlTask> newTasks;
             {
                 unique_lock<mutex> lock(visitedMutex);
                 for (const string &link : extractedLinks)
                 {
-                    // depth limit: only schedule if next depth is within MAX_DEPTH
+                    // depth restriction
                     if (currentDepth + 1 > MAX_DEPTH)
                         continue;
-
-                    // 🌐 DOMAIN RESTRICTION: only schedule URLs from ALLOWED_DOMAIN
+                    // domain restriction (extra safety)
                     if (!isInAllowedDomain(link))
                         continue;
 
@@ -371,34 +344,53 @@ void crawler_worker(int thread_id)
                         newTasks.push_back(UrlTask{link, currentDepth + 1});
                     }
                 }
-            } // visitedMutex unlocked
+            } // unlock visitedMutex
 
             for (const auto &t : newTasks)
             {
                 urlFrontier.push(t);
             }
 
-            // 5. Update global page count and possibly stop
+            // Increment global count
             int currentCount = ++pagesCrawled;
             cout << "[Thread " << thread_id << "] Indexed: " << currentUrl
                  << " | Depth: " << currentDepth
-                 << " | Links: " << extractedLinks.size()
+                 << " | New tasks: " << newTasks.size()
                  << " | Title: \"" << title << "\""
                  << " | Total pages: " << currentCount << endl;
 
+            // If we reached MAX_PAGES, signal stop and exit task
             if (currentCount >= MAX_PAGES)
             {
-                // Signal all threads that we are done
+                urlFrontier.stop(); // wake all waiting threads
+                int stillActive = --activeWorkers;
+                break; // exit loop -> cleanup
+            }
+
+            // Finished processing this task
+            int stillActive = --activeWorkers;
+            if (stillActive == 0 && urlFrontier.empty())
+            {
+                // Last active worker and no queued work -> stop queue so other threads exit
                 urlFrontier.stop();
-                break; // This thread can exit now
+                break;
             }
         }
         else
         {
+            // Fetch failed
             cerr << "[Thread " << thread_id << "] Failed: " << currentUrl
                  << " - " << curl_easy_strerror(res) << endl;
+
+            // finished this task, decrement and possibly stop
+            int stillActive = --activeWorkers;
+            if (stillActive == 0 && urlFrontier.empty())
+            {
+                urlFrontier.stop();
+                break;
+            }
         }
-    }
+    } // while
 
     curl_easy_cleanup(curl);
 }
