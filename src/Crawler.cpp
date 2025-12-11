@@ -49,6 +49,53 @@ string getApiEndpoint()
     return string(env_url);
 }
 
+// Escape minimal set of chars for JSON string values
+static string jsonEscape(const std::string &s)
+{
+    string out;
+    out.reserve(s.size() + 16);
+    for (char c : s)
+    {
+        switch (c)
+        {
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\"':
+            out += "\\\"";
+            break;
+        case '\b':
+            out += "\\b";
+            break;
+        case '\f':
+            out += "\\f";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            // control characters (0x00–0x1F) -> \u00XX
+            if (static_cast<unsigned char>(c) < 0x20)
+            {
+                char buf[7];
+                snprintf(buf, sizeof(buf), "\\u%04x", c & 0xff);
+                out += buf;
+            }
+            else
+            {
+                out += c;
+            }
+        }
+    }
+    return out;
+}
+
 string toLowerCopy(const string &s)
 {
     string out = s;
@@ -110,6 +157,70 @@ string resolveUrl(const string &baseUrl, const string &newUrl)
         return "";
 }
 
+// find first <title> node and collect its text children (robust to multiple text nodes)
+static string extractTitleFromNode(GumboNode *node)
+{
+    if (!node || node->type != GUMBO_NODE_ELEMENT)
+        return "";
+
+    if (node->v.element.tag == GUMBO_TAG_TITLE)
+    {
+        string title;
+        GumboVector *children = &node->v.element.children;
+        for (unsigned int i = 0; i < children->length; ++i)
+        {
+            GumboNode *child = static_cast<GumboNode *>(children->data[i]);
+            if (child->type == GUMBO_NODE_TEXT || child->type == GUMBO_NODE_WHITESPACE)
+            {
+                if (child->type == GUMBO_NODE_TEXT && child->v.text.text)
+                {
+                    title += string(child->v.text.text);
+                }
+            }
+            else if (child->type == GUMBO_NODE_ELEMENT)
+            {
+                // In some malformed pages, title text can be nested — collect recursively
+                const string nested = extractTitleFromNode(child);
+                if (!nested.empty())
+                    title += nested;
+            }
+        }
+        return title;
+    }
+
+    GumboVector *children = &node->v.element.children;
+    for (unsigned int i = 0; i < children->length; ++i)
+    {
+        GumboNode *child = static_cast<GumboNode *>(children->data[i]);
+        if (child->type == GUMBO_NODE_ELEMENT)
+        {
+            string found = extractTitleFromNode(child);
+            if (!found.empty())
+                return found;
+        }
+    }
+    return "";
+}
+
+// Public wrapper: parse HTML and return a trimmed title (or empty string)
+static string extractTitleFromHtml(const string &html)
+{
+    if (html.empty())
+        return "";
+    GumboOutput *output = gumbo_parse(html.c_str());
+    std::string title = extractTitleFromNode(output->root);
+    // trim leading/trailing whitespace
+    size_t start = 0;
+    while (start < title.size() && isspace((unsigned char)title[start]))
+        ++start;
+    size_t end = title.size();
+    while (end > start && isspace((unsigned char)title[end - 1]))
+        --end;
+    string trimmed = title.substr(start, end - start);
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+    return trimmed;
+}
+
 void searchForLinks(GumboNode *node, const string &baseUrl, vector<string> &extractedLinks)
 {
     if (node->type != GUMBO_NODE_ELEMENT)
@@ -136,19 +247,21 @@ void searchForLinks(GumboNode *node, const string &baseUrl, vector<string> &extr
     }
 }
 
-void sendDataToBackend(const string &url, const vector<string> &links)
+void sendDataToBackend(const std::string &url, const std::string &title, const std::vector<std::string> &links)
 {
     CURL *curl = curl_easy_init();
     if (!curl)
         return;
 
-    // 1. Construct JSON manually
-    // WARNING: Vulnerable to JSON injection if URLs contain quotes.
-    string json = "{ \"url\": \"" + url + "\", \"links\": [";
+    std::string escapedUrl = jsonEscape(url);
+    std::string escapedTitle = jsonEscape(title);
+
+    // Build JSON safely (manual but escaped)
+    std::string json = "{ \"url\": \"" + escapedUrl + "\", \"title\": \"" + escapedTitle + "\", \"links\": [";
     for (size_t i = 0; i < links.size(); ++i)
     {
-        json += "\"" + links[i] + "\"";
-        if (i < links.size() - 1)
+        json += "\"" + jsonEscape(links[i]) + "\"";
+        if (i + 1 < links.size())
             json += ",";
     }
     json += "] }";
@@ -156,21 +269,21 @@ void sendDataToBackend(const string &url, const vector<string> &links)
     struct curl_slist *headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    string api_url = getApiEndpoint();
+    std::string api_url = getApiEndpoint();
 
     curl_easy_setopt(curl, CURLOPT_URL, api_url.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L); // 5s timeout for API pushes
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
 
-    string response;
+    std::string response;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK)
     {
-        cerr << "API Error: " << curl_easy_strerror(res) << endl;
+        std::cerr << "API Error: " << curl_easy_strerror(res) << std::endl;
     }
 
     curl_slist_free_all(headers);
@@ -231,10 +344,13 @@ void crawler_worker(int thread_id)
 
             vector<string> extractedLinks;
             searchForLinks(output->root, currentUrl, extractedLinks); // Extract new links
+                                                                      // Extract title from raw HTML buffer (more reliable) OR from Gumbo tree
+            string title = extractTitleFromHtml(html_buffer);
+
             gumbo_destroy_output(&options, output);
 
-            if (!extractedLinks.empty())
-                sendDataToBackend(currentUrl, extractedLinks);
+            // 3. Report to Backend (always include title even if no links)
+            sendDataToBackend(currentUrl, title, extractedLinks);
 
             sort(extractedLinks.begin(), extractedLinks.end());
             // erase all the duplicate elements
@@ -273,6 +389,7 @@ void crawler_worker(int thread_id)
             cout << "[Thread " << thread_id << "] Indexed: " << currentUrl
                  << " | Depth: " << currentDepth
                  << " | Links: " << extractedLinks.size()
+                 << " | Title: \"" << title << "\""
                  << " | Total pages: " << currentCount << endl;
 
             if (currentCount >= MAX_PAGES)
