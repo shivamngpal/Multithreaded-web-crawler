@@ -1,5 +1,5 @@
 // src/Crawler.cpp
-#include "Crawler.h"
+#include "../include/Crawler.hpp"
 
 #include <iostream>
 #include <string>
@@ -17,7 +17,7 @@
 #include <curl/curl.h>
 #include <gumbo.h>
 
-#include "SafeQueue.h"        // SafeQueue template
+#include "../include/SafeQueue.hpp"        // SafeQueue template
 #include "util/UrlUtils.h"    // resolveUrl, isInAllowedDomain, write_callback, etc.
 #include "parse/HtmlParser.h" // extractLinksFromGumbo, extractTitleFromGumboOutput
 

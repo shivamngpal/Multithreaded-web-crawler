@@ -1,0 +1,1 @@
+g++ src/main.cpp src/Crawler.cpp src/util/UrlUtils.cpp src/parse/HtmlParser.cpp -o build/crawler --std=c++17 -lcurl -lgumbo -pthread
