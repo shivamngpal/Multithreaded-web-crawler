@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useEffect } from "react"
 import {getPages} from "../api/pagesApi.js"
 import StatsCard from "../components/StatsCard.jsx"
+import PageCard from "../components/PageCard.jsx"
 import Loader from "../components/Loader.jsx"
 
 // heading
@@ -37,7 +38,18 @@ export default function Dashboard(){
         <Header/>
         <h1>Statistics Card</h1>
         <StatsCard pages={pages}/>
+        <h1>Page Card</h1>
+        <PageList pages={pages}/>
     </>
+}
+
+// used to generate pageCard of one page at a time
+function PageList({pages}){
+    return <>
+        {pages.map((page) => (
+        <PageCard key={page.url} page={page} />
+    ))}
+    </>;
 }
 
 function Header(){
