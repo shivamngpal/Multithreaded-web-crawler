@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useEffect } from "react"
 import {getPages} from "../api/pagesApi.js"
-// import StatsCard from "../components/StatsCard.jsx"
+import StatsCard from "../components/StatsCard.jsx"
 import Loader from "../components/Loader.jsx"
 
 // heading
@@ -11,7 +11,7 @@ import Loader from "../components/Loader.jsx"
 
 export default function Dashboard(){
     const [pages,setPages]= useState([]);
-    const [Loading,setLoading]= useState(false);
+    const [loading,setLoading]= useState(false);
     const [error,setError]= useState(null);
 
     useEffect(()=>{
@@ -20,7 +20,7 @@ export default function Dashboard(){
             setError(null);
             try{
                 const data = await getPages();
-                setPages(data);
+                setPages(data); //data contains record array
             }catch(err){
                 setError(err.message);
             }finally{
@@ -30,12 +30,13 @@ export default function Dashboard(){
         fetchPages();
     },[]);
 
-    if(Loading) return <Loader/>;
+    if(loading) return <Loader/>;
     if(error) return <h2>Error : {error}</h2>
 
     return <>
         <Header/>
-        {/* <StatsCard pages={pages}/> */}
+        <h1>Statistics Card</h1>
+        <StatsCard pages={pages}/>
     </>
 }
 
