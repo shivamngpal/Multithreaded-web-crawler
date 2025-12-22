@@ -1,3 +1,5 @@
+import { formatRelativeTime } from "../utils/formatDate.js";
+
 function PagesCrawled({pages}){
     const pageNum = pages.length;
     return <>
@@ -14,15 +16,15 @@ function LastUpdated({ pages }) {
 //       : latest;
 //   }, pages[0].createdAt);
 
-  return <h3>Last Updated: {new Date(pages[0].createdAt).toLocaleString()}</h3>;
+  return <h3>Last Updated: {formatRelativeTime(pages[0].createdAt)}({new Date(pages[0].createdAt).toLocaleString()})</h3>;
 }
 
 
 export default function StatsCard({pages}){
-    return <div>
+    return <>
         <PagesCrawled pages={pages}/>
         <h3>Seed Domain : http://info.cern.ch</h3>
         <LastUpdated pages={pages}/>
         <h3>Status : Completed</h3>
-    </div>
+    </>
 }
