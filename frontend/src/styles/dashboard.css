@@ -1,0 +1,80 @@
+.dashboard {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.dashboard-header {
+  margin-bottom: 32px;
+}
+
+.dashboard-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.dashboard-header p {
+  color: #555;
+  font-size: 15px;
+}
+
+.stats-container {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  min-width: 220px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card h3 {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.stat-card p {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.page-section {
+  margin-top: 24px;
+}
+
+.page-section h2 {
+  margin-bottom: 12px;
+  font-size: 22px;
+}
+
+.page-list {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+.page-card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 260px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
+.page-card h4 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.page-card p {
+  font-size: 14px;
+  color: #555;
+}

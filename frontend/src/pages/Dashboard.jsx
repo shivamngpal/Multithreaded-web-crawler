@@ -34,28 +34,34 @@ export default function Dashboard(){
     if(loading) return <Loader/>;
     if(error) return <h2>Error : {error}</h2>
 
-    return <>
+    return <div className="dashbaord">
         <Header/>
         <h1>Statistics Card</h1>
         <StatsCard pages={pages}/>
         <h1>Page Card</h1>
         <PageList pages={pages}/>
-    </>
+        <Footer/>
+    </div>
 }
 
 // used to generate pageCard of one page at a time
 function PageList({pages}){
-    return <>
-        {pages.map((page) => (
-        <PageCard key={page.url} page={page} />
-    ))}
-    </>;
+    return <div className="page-list">
+        {pages.map(page => (
+            <PageCard key={page.url} page={page} />
+        ))}
+    </div>
 }
 
 function Header(){
-    return <>
+    return <div className="dashboard-header">
     <h1>Multithreaded Web Crawler Dashboard</h1>
-    <h3>Seed Url : http://info.cern.ch</h3>
     <h3>Built in C++ (libcurl + Gumbo) with MERN backend</h3>
-    </>
+    </div>
+}
+
+function Footer(){
+    return  <div className="footer">
+        Built by Shivam Nagpal | Multithreaded Web Crawler
+    </div>
 }

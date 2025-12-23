@@ -16,15 +16,34 @@ function LastUpdated({ pages }) {
 //       : latest;
 //   }, pages[0].createdAt);
 
-  return <h3>Last Updated: {formatRelativeTime(pages[0].createdAt)}({new Date(pages[0].createdAt).toLocaleString()})</h3>;
+  return <>
+      {formatRelativeTime(pages[0].createdAt)}
+      ({new Date(pages[0].createdAt).toLocaleString()})
+  </>
 }
 
 
 export default function StatsCard({pages}){
-    return <>
-        <PagesCrawled pages={pages}/>
-        <h3>Seed Domain : http://info.cern.ch</h3>
-        <LastUpdated pages={pages}/>
-        <h3>Status : Completed</h3>
-    </>
+  return <div className="stats-container">
+    <div className="stat-card">
+      <h3>Pages Crawled</h3>
+      <p>{pages.length}</p>
+    </div>
+
+    <div className="stat-card">
+      <h3>Seed Domain</h3>
+      <p>info.cern.ch</p>
+    </div>
+
+    <div className="stat-card">
+      <h3>Last Updated</h3>
+      <p><LastUpdated pages={pages}/></p>
+    </div>
+</div>
+    // return <>
+    //     <PagesCrawled pages={pages}/>
+    //     <h3>Seed Domain : http://info.cern.ch</h3>
+    //     <LastUpdated pages={pages}/>
+    //     <h3>Status : Completed</h3>
+    // </>
 }

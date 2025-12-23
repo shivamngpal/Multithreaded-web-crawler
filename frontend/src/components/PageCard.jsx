@@ -3,16 +3,16 @@ function UrlComponent({page}){
         return <p>No page yet.</p>
 
     return (
-    <ul>
-        <li key={page.url}>
-          <a href={page.url} target="_blank" rel="noreferrer">
-            {page.title || page.url}
-          </a>
-          {typeof page.linksCount === "number" && <> · Links: {page.linksCount}</>}
-          {page.createdAt && <> · {new Date(page.createdAt).toLocaleString()}</>}
-        </li>
-    </ul>
-  );
+    <div className="page-card">
+      <h4>
+        <a href={page.url} target="_blank" rel="noreferrer">
+          {page.title || "Untitled Page"}
+        </a>
+      </h4>
+      <p>Links: {page.linksCount}</p>
+      <p>{new Date(page.createdAt).toLocaleString()}</p>
+    </div>
+    );
 }
 export default function PageCard({page}){
     return <>
