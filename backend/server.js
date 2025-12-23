@@ -9,9 +9,7 @@ const connectDatabase = require("./config/db");
 dotenv.config();
 
 const app = express();
-app.use(cors({
-    origin:["http://localhost:5173"]
-}));    //enable cors for react app only -> cors() -> enable cors for all origin
+app.use(cors());    //enable cors for react app only -> cors() -> enable cors for all origin
 app.use(express.json());    // middleware used for reading json from body
 // const crawler_url = process.env.CRAWLER_API_URL;
 

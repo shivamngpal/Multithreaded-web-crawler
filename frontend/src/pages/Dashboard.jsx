@@ -4,6 +4,7 @@ import {getPages} from "../api/pagesApi.js"
 import StatsCard from "../components/StatsCard.jsx"
 import PageCard from "../components/PageCard.jsx"
 import Loader from "../components/Loader.jsx"
+import "../styles/dashboard.css"
 
 // heading
 // cards -> stats and pages
@@ -34,11 +35,11 @@ export default function Dashboard(){
     if(loading) return <Loader/>;
     if(error) return <h2>Error : {error}</h2>
 
-    return <div className="dashbaord">
+    return <div className="dashboard">
         <Header/>
-        <h1>Statistics Card</h1>
+        <h2>Statistics</h2>
         <StatsCard pages={pages}/>
-        <h1>Page Card</h1>
+        <h2>Crawled Pages</h2>
         <PageList pages={pages}/>
         <Footer/>
     </div>

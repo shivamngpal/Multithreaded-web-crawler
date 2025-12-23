@@ -1,12 +1,5 @@
 import { formatRelativeTime } from "../utils/formatDate.js";
 
-function PagesCrawled({pages}){
-    const pageNum = pages.length;
-    return <>
-        <h3>Pages Crawled : {pageNum}</h3>
-    </>
-}
-
 function LastUpdated({ pages }) {
   if (pages.length === 0) return <h3>Last Updated: N/A</h3>;
 
@@ -32,18 +25,12 @@ export default function StatsCard({pages}){
 
     <div className="stat-card">
       <h3>Seed Domain</h3>
-      <p>info.cern.ch</p>
+      <p>http://info.cern.ch</p>
     </div>
 
     <div className="stat-card">
       <h3>Last Updated</h3>
       <p><LastUpdated pages={pages}/></p>
     </div>
-</div>
-    // return <>
-    //     <PagesCrawled pages={pages}/>
-    //     <h3>Seed Domain : http://info.cern.ch</h3>
-    //     <LastUpdated pages={pages}/>
-    //     <h3>Status : Completed</h3>
-    // </>
+  </div>
 }
