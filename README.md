@@ -6,9 +6,7 @@ C++ web crawler (libcurl + Gumbo) with a MERN backend and a React dashboard.
 - Frontend: React dashboard to view stats and recent pages.
 
 ## Screenshots
-Place your screenshots under docs/ and they’ll render below.
-
-![Dashboard – Overview]![alt text](dashboard.png)
+Dashboard ![alt text](dashboard.png)
 
 ## Repository layout
 - crawler/ — C++ crawler (libcurl, gumbo-parser, nlohmann::json)
